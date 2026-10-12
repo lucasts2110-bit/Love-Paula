@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I love you &lt;3</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="scene" aria-label="Coração formado por frases Love You">
+    <canvas id="heartCanvas"></canvas>
+    <div id="centerText">I Love You Paula</div>
+  </main>
+
+  <script>
+    // Conversão da lógica do Pygame para Canvas no navegador.
+    // O CSS fica em style.css; este script cuida das partículas e animações.
+    const canvas = document.getElementById("heartCanvas");
+    const ctx = canvas.getContext("2d");
+    const centerText = document.getElementById("centerText");
+
+    const WORDS = [
+    "I love you",
+    "Te amo",                  // Português
+    "Te amo",                      // Espanhol
+    "Je t'aime",                   // Francês
+    "Ti amo",                      // Italiano
+    "Ich liebe dich",              // Alemão
+    "愛してる",
+    "Te amo",
+    "Te amo",                      // Japonês
+    "사랑해",                        // Coreano
+    "我爱你",
+    "Te amo",
+    "Te amo",                       // Chinês
+    "Я тебя люблю",                // Russo
+    "أحبك",
+    "Te amo",                        // Árabe
+    "मैं तुमसे प्यार करता हूँ",       // Hindi
+    "Ik hou van jou",
+    "Te amo",              // Holandês
+    "Jag älskar dig",              // Sueco
+    "Jeg elsker deg",
+    "Te amo",              // Norueguês
+    "Jeg elsker dig",              // Dinamarquês
+    "Kocham cię",
+    "Te amo",
+    "Te amo",                  // Polonês
+    "Seni seviyorum",
+    "Te amo",              // Turco
+    "Te iubesc",
+    "Te amo",                   // Romeno
+    "Σ' αγαπώ"                     // Grego
+];
+    const COLORS = [
+      [70, 130, 180],
+      [30, 144, 255],
+      [0, 191, 255],
+      [100, 149, 237],
+      [65, 105, 225]
+    ];
+    const OUTLINE_COUNT = 160;
+    const FILL_COUNT = 130;
+    const particles = [];
+
+    let width = 0, height = 0, dpr = 1, frame = 0;
+    let outlineSpan = 0, fillStartFrame = 0, centerStart = 0;
+    let animationStarted = false;
+
+    const rand = (min, max) => Math.random() * (max - min) + min;
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    const colorString = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+    function heartXY(t) {
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t)
+                - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      return [x, -y];
+    }
+
+    function toScreen(x, y) {
+      // Escala proporcional ao tamanho da janela, mantendo espaço nas bordas.
+      const scale = Math.min(width / 46, height / 38);
+      return [x * scale + width / 2, y * scale + height / 2];
+    }
+
+    function distance(a, b) {
+      return Math.hypot(a[0] - b[0], a[1] - b[1]);
+    }
+
+    function createParticle(x, y, order, kind) {
+      return {
+        x, y, order, kind,
+        word: pick(WORDS),
+        color: pick(COLORS),
+        alpha: 0,
+        flicker: rand(0, Math.PI * 2),
+        delay: 0,
+        sizeMult: rand(0.85, 1.15)
+      };
+    }
+
+    function buildParticles() {
+      particles.length = 0;
+      const placedOutline = [];
+
+      for (let i = 0; i < OUTLINE_COUNT; i++) {
+        const t = (i / OUTLINE_COUNT) * Math.PI * 2;
+        const point = toScreen(...heartXY(t));
+        if (placedOutline.some(p => distance(point, p) < Math.max(12, width * 0.009))) continue;
+        placedOutline.push(point);
+        particles.push(createParticle(point[0], point[1], i, "outline"));
+      }
+
+      const outline = particles.slice();
+      outlineSpan = outline.reduce((m, p) => Math.max(m, p.order), 0);
+      const framesPerStep = 1.6;
+      fillStartFrame = Math.floor(outlineSpan * framesPerStep) + 30;
+
+      for (const p of outline) p.delay = Math.floor(p.order * framesPerStep);
+
+      const placedFill = [...placedOutline];
+      let attempts = 0;
+      const maxAttempts = FILL_COUNT * 80;
+
+      while (particles.length < outline.length + FILL_COUNT && attempts < maxAttempts) {
+        attempts++;
+        const t = rand(0, Math.PI * 2);
+        const r = rand(0, 0.86);
+        const [bx, by] = heartXY(t);
+        const point = toScreen(bx * r, by * r);
+
+        if (placedFill.some(p => distance(point, p) < Math.max(16, width * 0.014))) continue;
+
+        placedFill.push(point);
+        const p = createParticle(point[0], point[1], Math.floor(rand(0, 321)), "fill");
+        p.delay = fillStartFrame + p.order;
+        particles.push(p);
+      }
+
+      centerStart = fillStartFrame + 200;
+    }
+
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      buildParticles();
+      frame = 0;
+      centerText.classList.remove("visible");
+      animationStarted = false;
+    }
+
+    function drawGlowText(p, alpha) {
+      if (alpha <= 0) return;
+
+      const isOutline = p.kind === "outline";
+      const baseSize = isOutline ? 14 : 12;
+      const fontSize = Math.max(7, baseSize * p.sizeMult * Math.min(width / 1100, height / 700, 1.2));
+      ctx.save();
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Due passate morbide simulano il glow delle superfici trasparenti di Pygame.
+      ctx.shadowColor = colorString(p.color, alpha / 255);
+      ctx.shadowBlur = alpha > 10 ? 12 : 0;
+      ctx.fillStyle = colorString(p.color, alpha / 255);
+      ctx.fillText(p.word, p.x, p.y);
+      ctx.restore();
+    }
+
+    function drawCenter() {
+      if (frame <= centerStart) return;
+      const progress = Math.min(1, (frame - centerStart) / 60);
+      const alpha = 1 - Math.exp(-progress * 8);
+      centerText.style.opacity = alpha.toFixed(3);
+      const pulse = 1 + 0.025 * Math.sin(frame * 0.05);
+      centerText.style.transform = `translate(-50%, -50%) scale(${pulse})`;
+      if (!animationStarted) {
+        centerText.classList.add("visible");
+        animationStarted = true;
+      }
+    }
+
+    function animate() {
+      frame++;
+      ctx.clearRect(0, 0, width, height);
+
+      for (const p of particles) {
+        if (frame > p.delay && p.alpha < 255) {
+          p.alpha = Math.min(255, p.alpha + 14 + Math.floor(Math.random() * 5));
+        }
+
+        let flick = 1;
+        if (p.alpha >= 255) {
+          flick = 0.75 + 0.25 * Math.sin(frame * 0.04 + p.flicker);
+        }
+        drawGlowText(p, Math.floor(p.alpha * flick));
+      }
+
+      drawCenter();
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener("resize", resize);
+    resize();
+    animate();
+  </script>
+</body>
+</html>
